@@ -1,11 +1,10 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/power.h>
-#include <DHT.h>
+#include <../../../../libraries/DHTSensorLibrary/DHT.h>
 #include <string.h>
-#include <Wire.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
+#include </usr/share/arduino/libraries/Wire/Wire.h>
+#include <../../../../libraries/OneWire/OneWire.h>
 
 /* Definitions for Libraries used */
 #define DHTTYPE DHT11
@@ -13,9 +12,6 @@
 
 #define ONE_WIRE_BUS 10
 OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
-// arrays to hold device address
-DeviceAddress insideThermometer;
 
 /* Define I2C controll Numbers */
 #define RTC_CNTRL 104
@@ -41,3 +37,4 @@ DeviceAddress insideThermometer;
 
 /* Constants Used */
 const long ONE_SECOND_INTERVAL = 15624;
+

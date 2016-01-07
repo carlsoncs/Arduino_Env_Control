@@ -1,22 +1,61 @@
-#include "EV_CONTROL_BOARD2.h"
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <avr/power.h>
+#include <DHT.h>
+#include <string.h>
+#include <Wire.h>
+#include <OneWire.h>
+
+/* Definitions for Libraries used */
+#define DHTTYPE DHT11
+#define DHTPIN 6    // Onboard Temp/Humidity Sensor
+
+#define ONE_WIRE_BUS 10
+OneWire oneWire(ONE_WIRE_BUS);
+
+/* Define I2C controll Numbers */
+#define RTC_CNTRL 104
+#define EC_CONTRL 100
+
+/* Definitions for Digital Pins */
+#define GFCI_RELAY 8
+#define PUMP1_RELAY 5
+#define PUMP2_RELAY 9
+#define PUMP_3_RELAY 7
+#define PS_ON 2    // Onboard ATX "Power Supply On" wire.  High to power off the ATX, Low to turn it on.
+                    // Arduino itself gets power from the ATX when not plugged into a USB port, which means,
+                    // when it is not connected to a secondary power supply, setting PS_ON HIGH literally
+                    // kills all the power to the board which will simultaneous kill to all AC circuits
+                    // that are running on a relay. --An accidentally discovered safety measure for the
+                    // testing environment; when software design is sufficiently robust it can be given a
+                    // secondary power source to effectively remove the 'feature'.
+
+/* Definitions for Analog Pins */
+#define LIGHT_SENSOR A0
+#define PH_SENSOR A1
+
+
+/* Constants Used */
+const long ONE_SECOND_INTERVAL = 15624;
 
 // Timer Variables
 volatile int seconds;
 volatile int minutes;
 volatile int hours;
+volatile boolean IS_DAYTIME;
 
   // Relay Specific Timer Variables
     volatile int gfci_time_remaining;
-    const int GFCI_TIMER_INTERVAL;
+    const int GFCI_TIMER_INTERVAL = 240;  // in minutes == 4 hours.
 
     volatile int pump1_time_remaining;
-    const int PUMP1_TIMER_INTERVAL;
+    const int PUMP1_TIMER_INTERVAL = 1; // seconds.
 
     volatile int pump2_time_remaining;
-    const int PUMP2_TIMER_INTERVAL;
+    const int PUMP2_TIMER_INTERVAL = 1;  // seconds.
 
     volatile int pump3_time_remaining;
-    const int PUMP3_TIMER_INTERVAL;
+    const int PUMP3_TIMER_INTERVAL = 3;  // seconds.
 
 
 // Relay State Variables
@@ -25,7 +64,7 @@ volatile boolean PUMP1_ON;
 volatile boolean PUMP2_ON;
 volatile boolean PUMP3_ON;
 
-// Seson State Variables
+// Sensor State Variables
 volatile boolean PH_SENSOR_READING_COMPLETE;
 volatile boolean EC_SENSOR_READING_COMPLETE;
 volatile boolean RTC_UPDATE_READY;
@@ -44,15 +83,39 @@ void setup()
 
    Serial.print("Getting Status Information from ppm meter:\n");
    Wire.begin();
-   Wire.beginTransmission(0x64);
-   Wire.write("STATUS");
-   Wire.endTransmission();
+   
+   boolean good_read = false;
 
-   delay(300);
-   while(Wire.available)
+  
+   Wire.beginTransmission(0x64);
+   Wire.write("STATUS\r");
+   Wire.endTransmission();
+   delay(400);
+   char initial_response = Wire.read();
+   char next = '1';
+   switch(initial_response)
    {
-     char c = Wire.read();
-     Serial.write(c);
+      case 1: 
+        while(next != '\0')
+        {
+           next = Wire.read();
+           Serial.print(next); 
+        }
+        break;
+       case 2: 
+         Serial.print("Request Failed");
+         break;
+        
+       case 254: 
+         Serial.print("Request Pending");
+         break;
+         
+       case 255:
+         Serial.print("No Data Recieved");
+         break;
+         
+       default:
+         break;
    }
 
 
@@ -137,12 +200,12 @@ void check_local_environment()
 
   char *feeding_status_string = (char *)calloc(64, sizeof(char));
 
-  if(eating)
+  if(GFCI_ON)
   {
-    sprintf(feeding_status_string, "%d seconds remaining in of feeding.", remaining_chow_time);
+    sprintf(feeding_status_string, "%d seconds remaining in of feeding.", gfci_time_remaining);
   }else
   {
-    sprintf(feeding_status_string, "%d:%d (hh:mm) till the next feeding.", time_to_chow/60, time_to_chow%60);
+    sprintf(feeding_status_string, "%d:%d (hh:mm) till the next feeding.", GFCI_TIMER_INTERVAL/60, GFCI_TIMER_INTERVAL%60);
   }
 
 
@@ -185,14 +248,3 @@ ISR(TIMER1_COMPA_vect)
 
 }
 
-/* Print Address function from the One wire libray */
-
-// function to print a device address
-void printAddress(DeviceAddress deviceAddress)
-{
-  for (uint8_t i = 0; i < 8; i++)
-  {
-    if (deviceAddress[i] < 16) Serial.print("0");
-    Serial.print(deviceAddress[i], HEX);
-  }
-}
